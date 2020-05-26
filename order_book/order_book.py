@@ -65,7 +65,6 @@ class OrderBook:
         self.sell_orders: DefaultDict[int, Deque[OrderEntry]] = defaultdict(deque)
 
         self.broadcast_messages: List[Dict] = []
-        self.broadcast_map: Dict[int, Dict] = {}
 
         self.min_sell: Optional[int] = None
         self.max_buy: Optional[int] = None
@@ -78,17 +77,16 @@ class OrderBook:
         new_order = OrderEntry(order_json)
 
         if new_order.is_buy:
-            self.process_buy_order(new_order)
+            self._process_buy_order(new_order)
         else:
-            self.process_sell_order(new_order)
+            self._process_sell_order(new_order)
 
         # Return transaction messages
         messages = self.broadcast_messages
         self.broadcast_messages = []
-        self.broadcast_map = {}
         return messages
 
-    def process_sell_order(self, sell_order: OrderEntry):
+    def _process_sell_order(self, sell_order: OrderEntry):
         # Fulfill existing orders
         while self.max_buy and sell_order.price <= self.max_buy:
             buy_offers = self.buy_orders[self.max_buy]
@@ -96,8 +94,7 @@ class OrderBook:
             while buy_offers:
                 buy_offer = buy_offers[0]
                 if buy_offer.visible_quantity <= sell_order.quantity:
-                    self._broadcast_transaction(buy_offer.id, buy_offer.id, sell_order.id, self.max_buy,
-                                                buy_offer.visible_quantity)
+                    self._broadcast_transaction(buy_offer.id, sell_order.id, self.max_buy, buy_offer.visible_quantity)
 
                     sell_order.quantity -= buy_offer.visible_quantity
                     buy_offer.visible_quantity = 0
@@ -107,8 +104,7 @@ class OrderBook:
                     if sell_order.quantity == 0:
                         return  # Order fulfilled completely
                 else:
-                    self._broadcast_transaction(buy_offer.id, buy_offer.id, sell_order.id, self.max_buy,
-                                                sell_order.quantity)
+                    self._broadcast_transaction(buy_offer.id, sell_order.id, self.max_buy, sell_order.quantity)
 
                     buy_offer.visible_quantity -= sell_order.quantity
 
@@ -121,7 +117,7 @@ class OrderBook:
         if not self.min_sell or self.min_sell > sell_order.price:
             self.min_sell = sell_order.price
 
-    def process_buy_order(self, buy_order: OrderEntry):
+    def _process_buy_order(self, buy_order: OrderEntry):
         # Fulfill existing orders
         while self.min_sell and buy_order.price >= self.min_sell:
             sell_offers = self.sell_orders[self.min_sell]
@@ -129,8 +125,7 @@ class OrderBook:
             while sell_offers:
                 sell_offer = sell_offers[0]
                 if sell_offer.visible_quantity <= buy_order.quantity:
-                    self._broadcast_transaction(sell_offer.id, buy_order.id, sell_offer.id, self.min_sell,
-                                                sell_offer.visible_quantity)
+                    self._broadcast_transaction(buy_order.id, sell_offer.id, self.min_sell, sell_offer.visible_quantity)
 
                     buy_order.quantity -= sell_offer.visible_quantity
                     sell_offer.visible_quantity = 0
@@ -140,8 +135,7 @@ class OrderBook:
                     if buy_order.quantity == 0:
                         return  # Order fulfilled completely
                 else:
-                    self._broadcast_transaction(sell_offer.id, buy_order.id, sell_offer.id, self.min_sell,
-                                                buy_order.quantity)
+                    self._broadcast_transaction(buy_order.id, sell_offer.id, self.min_sell, buy_order.quantity)
 
                     sell_offer.visible_quantity -= buy_order.quantity
 
@@ -154,18 +148,14 @@ class OrderBook:
         if not self.max_buy or self.max_buy < buy_order.price:
             self.max_buy = buy_order.price
 
-    def _broadcast_transaction(self, tid: int, buy_order_id: int, sell_order_id: int, price: int, quantity: int):
-        if tid in self.broadcast_map:
-            self.broadcast_map[tid]["quantity"] += quantity
-        else:
-            info_msg_dict = {
-                "buyOrderId": buy_order_id,
-                "sellOrderId": sell_order_id,
-                "price": price,
-                "quantity": quantity,
-            }
-            self.broadcast_messages.append(info_msg_dict)
-            self.broadcast_map[tid] = info_msg_dict
+    def _broadcast_transaction(self, buy_order_id: int, sell_order_id: int, price: int, quantity: int):
+        info_msg_dict = {
+            "buyOrderId": buy_order_id,
+            "sellOrderId": sell_order_id,
+            "price": price,
+            "quantity": quantity,
+        }
+        self.broadcast_messages.append(info_msg_dict)
 
     def to_json(self):
         return {
