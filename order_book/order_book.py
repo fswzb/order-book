@@ -29,13 +29,19 @@ class OrderEntry:
 
     @property
     def visible_quantity(self):
-        self._update_visible_quantity()
-        return self._visible_quantity
+        if self.is_iceberg:
+            self._update_visible_quantity()
+            return self._visible_quantity
+        else:
+            return self.quantity
 
     @visible_quantity.setter
     def visible_quantity(self, new_value: int):
-        self._visible_quantity = new_value
-        self._update_visible_quantity()
+        if self.is_iceberg:
+            self._visible_quantity = new_value
+            self._update_visible_quantity()
+        else:
+            self.quantity = new_value
 
     def to_json(self):
         return {
@@ -80,6 +86,8 @@ class OrderBook:
             self._process_buy_order(new_order)
         else:
             self._process_sell_order(new_order)
+
+
 
         # Return transaction messages
         messages = self.broadcast_messages

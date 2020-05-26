@@ -81,6 +81,44 @@ class TestOrderBook(unittest.TestCase):
         self.assertDictEqual({"buyOrderId": 4, "sellOrderId": 1, "price": 100, "quantity": 100}, msgs[3])
         self.assertDictEqual({"buyOrderId": 4, "sellOrderId": 2, "price": 100, "quantity": 100}, msgs[4])
 
+    def test_case_3(self):
+        input = [
+            {"type": "Limit", "order": {"direction": "Sell", "id": 1, "price": 99, "quantity": 20000}},
+            {"type": "Limit", "order": {"direction": "Buy", "id": 2, "price": 101, "quantity": 50000}},
+            {"type": "Limit", "order": {"direction": "Sell", "id": 3, "price": 99, "quantity": 20000}},
+            {"type": "Limit", "order": {"direction": "Buy", "id": 4, "price": 101, "quantity": 50000}}
+        ]
+
+        output = [
+            {"buyOrders": [], "sellOrders": [{"id": 1, "price": 99, "quantity": 20000}]},
+            {"buyOrders": [{"id": 2, "price": 101, "quantity": 30000}], "sellOrders": []},
+            {"buyOrders": [{"id": 2, "price": 101, "quantity": 10000}], "sellOrders": []},
+            {"buyOrders": [{"id": 2, "price": 101, "quantity": 10000}, {"id": 4, "price": 101, "quantity": 50000}],
+             "sellOrders": []}
+        ]
+
+        msgs = self.order_book.process_order(input[0])
+        book_json = self.order_book.to_json()
+        self.assertDictEqual(output[0], book_json)
+        self.assertEqual(0, len(msgs))
+
+        msgs = self.order_book.process_order(input[1])
+        book_json = self.order_book.to_json()
+        self.assertDictEqual(output[1], book_json)
+        self.assertEqual(1, len(msgs))
+        self.assertDictEqual({'buyOrderId': 2, 'sellOrderId': 1, 'price': 99, 'quantity': 20000}, msgs[0])
+
+        msgs = self.order_book.process_order(input[2])
+        book_json = self.order_book.to_json()
+        self.assertDictEqual(output[2], book_json)
+        self.assertEqual(1, len(msgs))
+        self.assertDictEqual({'buyOrderId': 2, 'sellOrderId': 3, 'price': 101, 'quantity': 20000}, msgs[0])
+
+        msgs = self.order_book.process_order(input[3])
+        book_json = self.order_book.to_json()
+        self.assertDictEqual(output[3], book_json)
+        self.assertEqual(0, len(msgs))
+
 
 if __name__ == '__main__':
     unittest.main()
