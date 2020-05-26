@@ -13,7 +13,7 @@ def main():
 
         json_line = json.loads(line.rstrip())
 
-        order_book.process_order(json_line)
+        order_book.process_raw_order(json_line)
 
         print(json.dumps(order_book.to_json()))
 
