@@ -29,6 +29,10 @@ class OrderEntry:
 
     @property
     def visible_quantity(self):
+        """ 'visible_quantity' takes into account peak value of Iceberg orders
+
+        If order type is Limit, 'visible_quantity' is just a front for 'quantity'.
+        """
         if self.is_iceberg:
             self._update_visible_quantity()
             return self._visible_quantity
@@ -77,6 +81,7 @@ class OrderBook:
 
     def process_order(self, order_json):
         """ Process new order and execute transactions
+
         :param order_json: New order (as JSON)
         :return: List of executed transactions metadata
         """
@@ -86,8 +91,6 @@ class OrderBook:
             self._process_buy_order(new_order)
         else:
             self._process_sell_order(new_order)
-
-
 
         # Return transaction messages
         messages = self.broadcast_messages
