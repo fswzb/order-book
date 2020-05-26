@@ -15,10 +15,9 @@ def main():
 
         executed_transactions = order_book.process_order(json_line)
 
+        print(json.dumps(order_book.to_json()))
         for t in executed_transactions:
             print(json.dumps(t))
-
-        print(json.dumps(order_book.to_json()))
 
 
 if __name__ == '__main__':
