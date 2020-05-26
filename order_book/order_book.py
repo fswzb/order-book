@@ -1,9 +1,14 @@
 import json
 from collections import deque, defaultdict
-from typing import Deque, DefaultDict, Optional, Dict
+from typing import Deque, DefaultDict, Optional, Dict, List
 
 
 class OrderEntry:
+    """ A single exchange order.
+
+        Recognized order types are Limit and Iceberg.
+    """
+
     def __init__(self, order_json):
         self.is_iceberg: bool = order_json['type'] == 'Iceberg'
 
@@ -44,18 +49,32 @@ class OrderEntry:
 
 
 class OrderBook:
+    """ Exchange order book
+
+        OrderBook stores all pending sell or buy orders.
+
+        To handle incoming orders, call 'process_order' method. It will
+        broadcast any transactions resulting from the added order.
+
+        To print contents of buy and order books, call 'to_json' method
+    """
+
     def __init__(self):
         # Group orders by it's price limit
         self.buy_orders: DefaultDict[int, Deque[OrderEntry]] = defaultdict(deque)
         self.sell_orders: DefaultDict[int, Deque[OrderEntry]] = defaultdict(deque)
 
-        self.broadcast_queue: Deque[Dict] = deque()
+        self.broadcast_messages: List[Dict] = []
         self.broadcast_map: Dict[int, Dict] = {}
 
         self.min_sell: Optional[int] = None
         self.max_buy: Optional[int] = None
 
-    def process_raw_order(self, order_json):
+    def process_order(self, order_json):
+        """ Process new order and execute transactions
+        :param order_json: New order (as JSON)
+        :return: List of executed transactions metadata
+        """
         new_order = OrderEntry(order_json)
 
         if new_order.is_buy:
@@ -63,11 +82,11 @@ class OrderBook:
         else:
             self.process_sell_order(new_order)
 
-        # Broadcast transaction messages
-        while self.broadcast_queue:
-            msg = self.broadcast_queue.popleft()
-            print(json.dumps(msg))
+        # Return transaction messages
+        messages = self.broadcast_messages
+        self.broadcast_messages = []
         self.broadcast_map = {}
+        return messages
 
     def process_sell_order(self, sell_order: OrderEntry):
         # Fulfill existing orders
@@ -145,7 +164,7 @@ class OrderBook:
                 "price": price,
                 "quantity": quantity,
             }
-            self.broadcast_queue.append(info_msg_dict)
+            self.broadcast_messages.append(info_msg_dict)
             self.broadcast_map[tid] = info_msg_dict
 
     def to_json(self):
