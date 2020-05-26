@@ -12,7 +12,9 @@ class OrderEntry:
         self.id: int = order['id']
         self.price: int = order['price']
         self.quantity: int = order['quantity']
+
         self.peak: int = order.get('peak', None)
+        self.visible_quantity = 0 if self.is_iceberg else self.quantity
 
     def to_json(self):
         return {
@@ -47,48 +49,74 @@ class OrderBook:
         else:
             return self.process_sell_order(new_order)
 
-    def process_sell_order(self, order: OrderEntry):
+    def process_sell_order(self, sell_order: OrderEntry):
         # Fulfill existing orders
-        while self.max_buy and order.price <= self.max_buy:
+        while self.max_buy and sell_order.price <= self.max_buy:
             buy_offers = self.buy_orders[self.max_buy]
-            self._execute_orders(order, buy_offers)
+
+            while buy_offers:
+                buy_offer = buy_offers[0]
+                if buy_offer.quantity < sell_order.quantity:
+                    OrderBook._broadcast_transaction(buy_offer.id, sell_order.id, self.max_buy, buy_offer.quantity)
+
+                    sell_order.quantity -= buy_offer.quantity
+                    buy_offers.popleft()
+                else:
+                    OrderBook._broadcast_transaction(buy_offer.id, sell_order.id, self.max_buy, sell_order.quantity)
+
+                    if buy_offer.quantity > sell_order.quantity:
+                        buy_offer.quantity -= sell_order.quantity
+                    else:
+                        buy_offers.popleft()
+
+                    return  # Order fulfilled completely
 
             self.max_buy -= 1
 
         # Store unfulfilled part of the order
-        self.sell_orders[order.price].append(order)
-        if not self.min_sell or self.min_sell > order.price:
-            self.min_sell = order.price
+        self.sell_orders[sell_order.price].append(sell_order)
+        if not self.min_sell or self.min_sell > sell_order.price:
+            self.min_sell = sell_order.price
 
-    def process_buy_order(self, order: OrderEntry):
+    def process_buy_order(self, buy_order: OrderEntry):
         # Fulfill existing orders
-        while self.min_sell and order.price >= self.min_sell:
+        while self.min_sell and buy_order.price >= self.min_sell:
             sell_offers = self.sell_orders[self.min_sell]
-            self._execute_orders(order, sell_offers)
+
+            while sell_offers:
+                sell_offer = sell_offers[0]
+                if sell_offer.quantity < buy_order.quantity:
+                    OrderBook._broadcast_transaction(buy_order.id, sell_offer.id, self.min_sell, sell_offer.quantity)
+
+                    buy_order.quantity -= sell_offer.quantity
+                    sell_offers.popleft()
+                else:
+                    OrderBook._broadcast_transaction(buy_order.id, sell_offer.id, self.min_sell, buy_order.quantity)
+
+                    if sell_offer.quantity > buy_order.quantity:
+                        sell_offer.quantity -= buy_order.quantity
+                    else:
+                        sell_offers.popleft()
+
+                    return  # Order fulfilled completely
 
             self.min_sell += 1
 
         # Store unfulfilled part of the order
-        self.buy_orders[order.price].append(order)
-        if not self.max_buy or self.max_buy < order.price:
-            self.max_buy = order.price
+        self.buy_orders[buy_order.price].append(buy_order)
+        if not self.max_buy or self.max_buy < buy_order.price:
+            self.max_buy = buy_order.price
 
     @staticmethod
-    def _execute_orders(order: OrderEntry, offers: Deque[OrderEntry]):
-        while offers:
-            offer = offers[0]
-            if offer.quantity < order.quantity:
-                # Broadcast transaction made
-                order.quantity -= offer.quantity
-                offers.popleft()
-            else:
-                # Broadcast transaction made
-                if offer.quantity > order.quantity:
-                    offer.quantity -= order.quantity
-                else:
-                    offers.popleft()
+    def _broadcast_transaction(buy_order_id: int, sell_order_id: int, price: int, quantity: int):
+        info_dict = {
+            "buyOrderId": buy_order_id,
+            "sellOrderId": sell_order_id,
+            "price": price,
+            "quantity": quantity,
+        }
 
-                return  # Order fulfilled completely
+        print(json.dumps(info_dict))
 
     def to_json(self):
         return {
